@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: Segoe UI, sans-serif; }
+
+  #topbar {
+    height: 44px; background: #3a3a3a;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 10px; border-bottom: 1px solid #555;
+  }
+  .btn {
+    width: 32px; height: 32px; background: #4d4d4d;
+    border: none; border-radius: 6px; color: #fff;
+    font-size: 20px; cursor: pointer;
+  }
+  .btn:hover { background: #666; }
+  #boardName { color: #eee; font-size: 14px; margin-left: 6px; }
+  #saved { color: #7fd17f; font-size: 12px; opacity: 0; transition: opacity .6s; margin-left: 8px; }
+  #saved.show { opacity: 1; transition: none; }
+  #status {
+    color: #bbb; font-size: 12px; margin-right: auto; direction: rtl;
+    opacity: 0; transition: opacity .6s;
+  }
+  #status.show { opacity: 1; transition: none; }
+
+  /* قائمة القوائم */
+  #menu {
+    position: absolute; top: 48px; left: 10px; z-index: 100000;
+    width: 320px; max-height: 70vh; overflow-y: auto;
+    background: #2d2d2d; border: 1px solid #666; border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.7);
+    display: none; padding: 6px; direction: rtl;
+  }
+  #menu.open { display: block; }
+  #menu .head { color: #999; font-size: 12px; padding: 4px 8px 6px; }
+  .brow { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 6px; }
+  .brow:hover { background: #3d3d3d; }
+  .brow.cur { background: #474747; }
+  .brow .bname {
+    flex: 1; color: #eee; font-size: 14px; cursor: pointer;
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 4px;
+  }
+  .brow .bcount { color: #999; font-size: 11px; }
+  .mini {
+    background: none; border: none; color: #bbb; cursor: pointer;
+    font-size: 14px; width: 26px; height: 26px; border-radius: 5px;
+  }
+  .mini:hover { background: #555; color: #fff; }
+  .mini.danger { color: #fff; background: #c0392b; width: auto; padding: 0 8px; font-size: 12px; }
+  #menu input {
+    flex: 1; min-width: 0; background: #1e1e1e; color: #fff;
+    border: 1px solid #666; border-radius: 5px; padding: 5px 8px; font-size: 13px;
+  }
+  .vitem {
+    padding: 5px 24px 5px 8px; color: #cfcfcf; font-size: 12px; border-radius: 5px;
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .vitem:hover { background: #4d4d4d; color: #fff; }
+  .vempty { padding: 5px 24px; color: #888; font-size: 12px; }
+  .addrow { display: flex; gap: 6px; padding: 8px 6px 4px; border-top: 1px solid #444; margin-top: 6px; }
+  .addrow button {
+    background: #4d4d4d; color: #fff; border: none; border-radius: 5px;
+    padding: 0 12px; cursor: pointer; font-size: 13px;
+  }
+  .addrow button:hover { background: #666; }
+
+  #canvas {
+    position: absolute; top: 44px; left: 0; right: 0; bottom: 0;
+    background-color: #000;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.25) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.25) 1px, transparent 1px);
+    background-size: 30px 30px;
+    overflow: hidden;
+  }
+
+  .vwin {
+    position: absolute; width: 360px; height: 240px;
+    background: #111; border: 1px solid #666; border-radius: 6px;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    touch-action: none; user-select: none; cursor: grab;
+  }
+  .vwin.dragging { cursor: grabbing; }
+  .vwin.max { border-radius: 0; cursor: default; }
+  .vwin.max .resizer { display: none; }
+  .vwin.flash { animation: flash 1s ease; }
+  @keyframes flash {
+    0%, 60% { border-color: #fff; box-shadow: 0 0 0 3px #fff, 0 4px 16px rgba(0,0,0,0.6); }
+    100% { border-color: #666; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+  }
+
+  .vbar {
+    height: 26px; background: #555; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 4px 0 8px; color: #ddd; font-size: 12px;
+  }
+  .vbar .title {
+    flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
+  .vbar .btns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .vbtn {
+    background: none; border: none; color: #ddd; font-size: 13px;
+    cursor: pointer; width: 24px; height: 22px; border-radius: 4px;
+  }
+  .vbtn:hover { background: #777; color: #fff; }
+  .vbtn.close { font-size: 15px; }
+  .vbtn.close:hover { background: #c0392b; }
+
+  .resizer {
+    position: absolute; right: 0; bottom: 0;
+    width: 18px; height: 18px; cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, #999 50%, #999 60%, transparent 60%, transparent 75%, #999 75%, #999 85%, transparent 85%);
+    z-index: 5;
+  }
+
+  .vwin video {
+    flex: 1; width: 100%; min-height: 0;
+    object-fit: contain; background: #000;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div id="topbar">
+    <button class="btn" id="addBtn" title="إضافة فيديو">+</button>
+    <button class="btn" id="listBtn" title="القوائم">☰</button>
+    <span id="boardName"></span>
+    <span id="saved">✓ محفوظ</span>
+    <span id="status"></span>
+  </div>
+  <div id="menu"></div>
+  <div id="canvas"></div>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const statusEl = document.getElementById('status');
+  const savedEl = document.getElementById('saved');
+  const boardNameEl = document.getElementById('boardName');
+  const menu = document.getElementById('menu');
+
+  const videos = new Map();   // key -> { win, video, path, name, url }  (القائمة الحالية فقط)
+  let boards = [];
+  let currentId = null;
+  let zTop = 1;
+  let loaded = false;
+  let dirty = false;
+  let saveTimer = null;
+  let statusTimer = null;
+  let savedTimer = null;
+  let renameId = null;
+  let confirmDelId = null;
+
+  // ---------- رسائل ----------
+  function setStatus(t, ms = 3500) {
+    statusEl.textContent = t;
+    statusEl.classList.add('show');
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => statusEl.classList.remove('show'), ms);
+  }
+  function flashSaved() {
+    savedEl.classList.add('show');
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => savedEl.classList.remove('show'), 1200);
+  }
+  function bringToFront(w) { w.style.zIndex = ++zTop; }
+  function curBoard() { return boards.find(b => b.id === currentId); }
+  function clamp(v, a, b) { return Math.min(Math.max(v, a), b); }
+
+  // ---------- جمع حالة القائمة الحالية ----------
+  function collect() {
+    const b = curBoard();
+    if (!b) return;
+    b.videos = [];
+    videos.forEach((v, key) => {
+      const w = v.win;
+      const r = w._rest || { x: w.offsetLeft, y: w.offsetTop, w: w.offsetWidth, h: w.offsetHeight };
+      b.videos.push({
+        key, path: v.path, name: v.name, url: v.url,
+        x: r.x, y: r.y, w: r.w, h: r.h,
+        z: parseInt(w.style.zIndex || '1', 10),
+        muted: v.video.muted,
+        vol: v.video.volume
+      });
+    });
+  }
+
+  // ---------- الحفظ ----------
+  function saveSoon() {            // للسحب وتغيير الحجم (تأخير قصير)
+    dirty = true;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, 150);
+  }
+  async function saveNow() {       // فوري
+    clearTimeout(saveTimer);
+    if (!loaded) return;
+    collect();
+    try {
+      const r = await pywebview.api.save_state({ current: currentId, boards });
+      if (r && r.ok) { dirty = false; flashSaved(); }
+      else setStatus('⚠ فشل الحفظ: ' + (r && r.error), 8000);
+    } catch (e) {
+      setStatus('⚠ فشل الحفظ: ' + e, 8000);
+    }
+  }
+  setInterval(() => { if (dirty) saveNow(); }, 5000);
+  window.addEventListener('beforeunload', () => { if (loaded) saveNow(); });
+  window.addEventListener('pagehide', () => { if (loaded) saveNow(); });
+
+  // ---------- عرض قائمة ----------
+  function renderBoard(b) {
+    videos.forEach(v => v.win.remove());
+    videos.clear();
+    zTop = 1;
+    [...b.videos].sort((a, c) => (a.z || 0) - (c.z || 0)).forEach(addVideo);
+    boardNameEl.textContent = b.name;
+  }
+
+  function switchBoard(id) {
+    if (id === currentId) return;
+    collect();
+    currentId = id;
+    renderBoard(curBoard());
+    saveNow();
+  }
+
+  // ---------- التحميل عند الفتح ----------
+  window.addEventListener('pywebviewready', async () => {
+    try {
+      const st = await pywebview.api.load_state();
+      boards = st.boards;
+      currentId = st.current;
+      renderBoard(curBoard());
+      loaded = true;
+      const info = await pywebview.api.get_info();
+      boardNameEl.title = 'ملف الحفظ: ' + info.state_path;
+      setStatus('ملف الحفظ: ' + info.state_path, 6000);
+    } catch (e) {
+      setStatus('⚠ خطأ بالتحميل: ' + e, 8000);
+    }
+  });
+
+  // ---------- زر + ----------
+  document.getElementById('addBtn').addEventListener('click', async () => {
+    try {
+      const res = await pywebview.api.pick_video();
+      if (!res) return;
+      if (res.error) { setStatus('خطأ: ' + res.error); return; }
+      if (res.cancel) return;
+      addVideo(res);
+      saveNow();
+    } catch (e) {
+      setStatus('خطأ: ' + e);
+    }
+  });
+
+  // ---------- إفلات ملف من Explorer (تستدعيها بايثون) ----------
+  function addDropped(item, x, y) {
+    const rect = canvas.getBoundingClientRect();
+    item.x = Math.max(0, Math.round(x - rect.left - 180));
+    item.y = Math.max(0, Math.round(y - rect.top - 20));
+    item.w = 360; item.h = 240;
+    addVideo(item);
+    saveNow();
+  }
+
+  // ---------- F11 ملء شاشة التطبيق ----------
+  document.addEventListener('keydown', e => {
+    if (e.key === 'F11') { e.preventDefault(); pywebview.api.toggle_fullscreen(); }
+    if (e.key === 'Escape') closeMenu();
+  });
+
+  // ---------- زر ☰ ----------
+  document.getElementById('listBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (menu.classList.contains('open')) { closeMenu(); return; }
+    renderMenu();
+    menu.classList.add('open');
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!menu.contains(e.target) && e.target.id !== 'listBtn') closeMenu();
+  });
+  function closeMenu() {
+    menu.classList.remove('open');
+    renameId = null;
+    confirmDelId = null;
+  }
+
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function renderMenu() {
+    menu.innerHTML = '';
+    menu.appendChild(el('div', 'head', 'القوائم المحفوظة'));
+
+    boards.forEach(b => {
+      const row = el('div', 'brow' + (b.id === currentId ? ' cur' : ''));
+
+      if (renameId === b.id) {
+        const inp = document.createElement('input');
+        inp.value = b.name;
+        let done = false;
+        const commit = () => {
+          if (done) return;
+          done = true;
+          const v = inp.value.trim();
+          if (v) b.name = v;
+          renameId = null;
+          if (b.id === currentId) boardNameEl.textContent = b.name;
+          saveNow();
+          renderMenu();
+        };
+        inp.addEventListener('keydown', ev => {
+          if (ev.key === 'Enter') commit();
+          if (ev.key === 'Escape') { done = true; renameId = null; renderMenu(); }
+        });
+        inp.addEventListener('blur', commit);
+        row.appendChild(inp);
+        menu.appendChild(row);
+        setTimeout(() => { inp.focus(); inp.select(); }, 0);
+        return;
+      }
+
+      const name = el('span', 'bname', b.name);
+      name.title = b.name;
+      name.addEventListener('click', () => { switchBoard(b.id); closeMenu(); });
+      row.appendChild(name);
+
+      const n = b.id === currentId ? videos.size : b.videos.length;
+      row.appendChild(el('span', 'bcount', n + ' 🎞'));
+
+      const edit = el('button', 'mini', '✎');
+      edit.title = 'تغيير الاسم';
+      edit.addEventListener('click', () => { renameId = b.id; confirmDelId = null; renderMenu(); });
+      row.appendChild(edit);
+
+      if (boards.length > 1) {
+        const del = el('button', 'mini' + (confirmDelId === b.id ? ' danger' : ''),
+                       confirmDelId === b.id ? 'تأكيد الحذف؟' : '🗑');
+        del.title = 'حذف القائمة';
+        del.addEventListener('click', () => {
+          if (confirmDelId !== b.id) { confirmDelId = b.id; renderMenu(); return; }
+          deleteBoard(b.id);
+        });
+        row.appendChild(del);
+      }
+      menu.appendChild(row);
+
+      if (b.id === currentId) {
+        if (videos.size === 0) {
+          menu.appendChild(el('div', 'vempty', 'فارغة'));
+        } else {
+          videos.forEach((v, key) => {
+            const it = el('div', 'vitem', '▸ ' + v.name);
+            it.title = v.name;
+            it.addEventListener('click', () => { focusVideo(key); closeMenu(); });
+            menu.appendChild(it);
+          });
+        }
+      }
+    });
+
+    const add = el('div', 'addrow');
+    const inp = document.createElement('input');
+    inp.placeholder = 'اسم قائمة جديدة';
+    const btn = el('button', '', 'إضافة');
+    const create = () => {
+      const name = inp.value.trim() || ('القائمة ' + (boards.length + 1));
+      collect();
+      const nb = { id: 'b' + Date.now(), name, videos: [] };
+      boards.push(nb);
+      currentId = nb.id;
+      renderBoard(nb);
+      saveNow();
+      closeMenu();
+    };
+    btn.addEventListener('click', create);
+    inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') create(); });
+    add.appendChild(inp);
+    add.appendChild(btn);
+    menu.appendChild(add);
+  }
+
+  function deleteBoard(id) {
+    const idx = boards.findIndex(b => b.id === id);
+    if (idx < 0 || boards.length <= 1) return;
+    const wasCurrent = id === currentId;
+    if (!wasCurrent) collect();
+    boards.splice(idx, 1);
+    confirmDelId = null;
+    if (wasCurrent) {
+      currentId = boards[0].id;
+      renderBoard(curBoard());
+    }
+    saveNow();
+    renderMenu();
+  }
+
+  function focusVideo(key) {
+    const v = videos.get(key);
+    if (!v) return;
+    const w = v.win;
+    if (!w._rest) {
+      const cw = canvas.clientWidth, ch = canvas.clientHeight;
+      w.style.left = Math.min(Math.max(0, w.offsetLeft), Math.max(0, cw - w.offsetWidth)) + 'px';
+      w.style.top  = Math.min(Math.max(0, w.offsetTop),  Math.max(0, ch - w.offsetHeight)) + 'px';
+    }
+    bringToFront(w);
+    w.classList.remove('flash');
+    void w.offsetWidth;
+    w.classList.add('flash');
+    saveNow();
+  }
+
+  // ---------- ملء المساحة لفيديو ----------
+  function fitMax(win) {
+    win.style.left = '0px'; win.style.top = '0px';
+    win.style.width = canvas.clientWidth + 'px';
+    win.style.height = canvas.clientHeight + 'px';
+  }
+  function toggleMax(win) {
+    if (win._rest) {
+      const r = win._rest;
+      win.style.left = r.x + 'px'; win.style.top = r.y + 'px';
+      win.style.width = r.w + 'px'; win.style.height = r.h + 'px';
+      win._rest = null;
+      win.classList.remove('max');
+    } else {
+      win._rest = { x: win.offsetLeft, y: win.offsetTop, w: win.offsetWidth, h: win.offsetHeight };
+      fitMax(win);
+      win.classList.add('max');
+      bringToFront(win);
+    }
+    saveSoon();
+  }
+  window.addEventListener('resize', () => {
+    videos.forEach(v => { if (v.win._rest) fitMax(v.win); });
+  });
+
+  // ---------- نافذة الفيديو ----------
+  // item: { key?, path, name, url, x?, y?, w?, h?, z?, muted?, vol? }
+  function addVideo(item) {
+    const key = item.key || ('v' + Date.now() + Math.random().toString(36).slice(2, 6));
+    const win = document.createElement('div');
+    win.className = 'vwin';
+
+    if (item.x !== undefined) {
+      win.style.left = item.x + 'px';
+      win.style.top = item.y + 'px';
+      win.style.width = (item.w || 360) + 'px';
+      win.style.height = (item.h || 240) + 'px';
+    } else {
+      const n = videos.size % 8;
+      win.style.left = (40 + n * 30) + 'px';
+      win.style.top  = (40 + n * 30) + 'px';
+    }
+
+    win.innerHTML = `
+      <div class="vbar">
+        <span class="title"></span>
+        <span class="btns">
+          <button class="vbtn snd" title="الصوت (دبل كليك أو Shift+عجلة)">🔇</button>
+          <button class="vbtn mx" title="ملء المساحة">⛶</button>
+          <button class="vbtn close" title="إزالة">✕</button>
+        </span>
+      </div>
+      <video loop preload="metadata"></video>
+      <div class="resizer"></div>
+    `;
+    win.querySelector('.title').textContent = item.name;
+
+    const video = win.querySelector('video');
+    video.muted = item.muted !== false;
+    video.volume = typeof item.vol === 'number' ? item.vol : 1;
+    video.src = item.url;
+    video.addEventListener('error', () => setStatus('الفيديو ما يشتغل (الصيغة غير مدعومة؟)'));
+
+    // ---- الصوت ----
+    const snd = win.querySelector('.snd');
+    function updSnd() { snd.textContent = (video.muted || video.volume === 0) ? '🔇' : '🔊'; }
+    updSnd();
+    function toggleSound() {
+      if (video.muted || video.volume === 0) {
+        video.muted = false;
+        if (video.volume === 0) video.volume = 0.5;
+      } else {
+        video.muted = true;
+      }
+      updSnd();
+      saveSoon();
+    }
+    snd.addEventListener('pointerdown', e => e.stopPropagation());
+    snd.addEventListener('click', toggleSound);
+    win.addEventListener('dblclick', e => {
+      if (e.target.closest('.vbtn') || e.target.classList.contains('resizer')) return;
+      toggleSound();
+    });
+
+    // ---- تشغيل عند دخول الماوس ----
+    win.addEventListener('mouseenter', () => {
+      video.play().catch(() => {
+        video.muted = true; updSnd();
+        video.play().catch(() => {});
+      });
+    });
+    win.addEventListener('mouseleave', () => video.pause());
+
+    // ---- ملء المساحة ----
+    const mx = win.querySelector('.mx');
+    mx.addEventListener('pointerdown', e => e.stopPropagation());
+    mx.addEventListener('click', () => toggleMax(win));
+
+    // ---- إزالة ----
+    const closeBtn = win.querySelector('.close');
+    closeBtn.addEventListener('pointerdown', e => e.stopPropagation());
+    closeBtn.addEventListener('click', () => {
+      win.remove();
+      videos.delete(key);
+      saveNow();
+    });
+
+    // ---- عجلة الماوس: تكبير/تصغير ، و Shift = الصوت ----
+    win.addEventListener('wheel', e => {
+      e.preventDefault();
+      const d = e.deltaY || e.deltaX;
+      if (!d) return;
+      if (e.shiftKey) {
+        const step = d < 0 ? 0.05 : -0.05;
+        video.volume = clamp(Math.round((video.volume + step) * 100) / 100, 0, 1);
+        if (video.volume > 0) video.muted = false;
+        updSnd();
+        setStatus('🔊 الصوت ' + Math.round(video.volume * 100) + '%', 1500);
+        saveSoon();
+        return;
+      }
+      if (win._rest) return;
+      const f = d < 0 ? 1.08 : 1 / 1.08;
+      const ow = win.offsetWidth, oh = win.offsetHeight;
+      const nw = clamp(ow * f, 160, canvas.clientWidth);
+      const nh = clamp(oh * f, 110, canvas.clientHeight);
+      win.style.left = (win.offsetLeft + (ow - nw) / 2) + 'px';
+      win.style.top  = (win.offsetTop  + (oh - nh) / 2) + 'px';
+      win.style.width = nw + 'px';
+      win.style.height = nh + 'px';
+      saveSoon();
+    }, { passive: false });
+
+    // ---- السحب من أي مكان ----
+    win.addEventListener('pointerdown', e => {
+      if (e.target.classList.contains('resizer')) return;
+      bringToFront(win);
+      if (win._rest) return;
+      win.setPointerCapture(e.pointerId);
+      win.classList.add('dragging');
+      const sx = e.clientX, sy = e.clientY;
+      const ox = win.offsetLeft, oy = win.offsetTop;
+
+      const move = ev => {
+        win.style.left = (ox + ev.clientX - sx) + 'px';
+        win.style.top  = (oy + ev.clientY - sy) + 'px';
+      };
+      const up = () => {
+        win.classList.remove('dragging');
+        win.removeEventListener('pointermove', move);
+        win.removeEventListener('pointerup', up);
+        saveSoon();
+      };
+      win.addEventListener('pointermove', move);
+      win.addEventListener('pointerup', up);
+    });
+
+    // ---- تغيير الحجم من الزاوية ----
+    const rz = win.querySelector('.resizer');
+    rz.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      bringToFront(win);
+      rz.setPointerCapture(e.pointerId);
+      const sx = e.clientX, sy = e.clientY;
+      const ow = win.offsetWidth, oh = win.offsetHeight;
+
+      const move = ev => {
+        win.style.width  = Math.max(160, ow + ev.clientX - sx) + 'px';
+        win.style.height = Math.max(110, oh + ev.clientY - sy) + 'px';
+      };
+      const up = () => {
+        rz.removeEventListener('pointermove', move);
+        rz.removeEventListener('pointerup', up);
+        saveSoon();
+      };
+      rz.addEventListener('pointermove', move);
+      rz.addEventListener('pointerup', up);
+    });
+
+    videos.set(key, { win, video, path: item.path, name: item.name, url: item.url });
+    if (item.z) zTop = Math.max(zTop, item.z);
+    bringToFront(win);
+    canvas.appendChild(win);
+  }
+</script>
+</body>
+</html>
